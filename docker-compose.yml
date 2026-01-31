@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  # PostgreSQL with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: youtube-recsys-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-recsys}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-recsys_password}
+      POSTGRES_DB: ${POSTGRES_DB:-youtube_recsys}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-recsys} -d ${POSTGRES_DB:-youtube_recsys}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
