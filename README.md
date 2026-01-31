@@ -5,7 +5,7 @@ A production-grade video recommendation system using two-tower architecture with
 ## Project Status
 
 - [x] Phase 1: Initial project setup with PostgreSQL schema
-- [ ] Phase 2: Data pipeline (scraper + simulator)
+- [x] Phase 2: Data pipeline (scraper + simulator)
 - [ ] Phase 3: Feature engineering (CLIP + transformers)
 - [ ] Phase 4: Two-tower retrieval model with FAISS
 - [ ] Phase 5: Ranking and re-ranking models
@@ -31,49 +31,95 @@ A production-grade video recommendation system using two-tower architecture with
 
 - Docker & Docker Compose
 - Python 3.10+
+- yt-dlp (for scraping)
 
-### 1. Clone the repository
+### 1. Clone and setup
 
 ```bash
 git clone https://github.com/yourusername/youtube-recsys.git
 cd youtube-recsys
-```
-
-### 2. Setup environment
-
-```bash
 cp .env.example .env
 ```
 
-### 3. Start PostgreSQL
+### 2. Start PostgreSQL
 
 ```bash
-docker-compose up -d
+sudo docker-compose up -d
 ```
 
-### 4. Verify database
+### 3. Install Python dependencies
 
 ```bash
-docker exec -it youtube-recsys-db psql -U recsys -d youtube_recsys -c "\dt"
+pip install -r requirements.txt
 ```
 
-You should see the tables: `videos`, `users`, `user_interactions`, etc.
+### 4. Install yt-dlp (for scraping)
+
+```bash
+pip install yt-dlp
+# or
+sudo apt install yt-dlp
+```
+
+## Data Pipeline
+
+### Scrape YouTube Videos
+
+```bash
+# Single search query
+python data/scraper/youtube_scraper.py --mode search --query "python tutorial" --max-videos 10
+
+# Scrape a channel
+python data/scraper/youtube_scraper.py --mode channel --query "https://www.youtube.com/@Fireship" --max-videos 20
+
+# Batch scrape multiple categories
+python data/scraper/batch_scraper.py --mode all --videos-per-query 10
+```
+
+### Load Data into Database
+
+```bash
+# Load videos from JSON
+python scripts/load_data.py --videos data/raw/videos_YYYYMMDD_HHMMSS.json
+
+# Simulate users and interactions
+python scripts/load_data.py --simulate-users 500 --simulate-days 30
+
+# Check database stats
+python scripts/load_data.py --stats
+```
+
+### Verify Data
+
+```bash
+sudo docker exec -it youtube-recsys-db psql -U recsys -d youtube_recsys -c "SELECT COUNT(*) FROM videos;"
+sudo docker exec -it youtube-recsys-db psql -U recsys -d youtube_recsys -c "SELECT COUNT(*) FROM users;"
+sudo docker exec -it youtube-recsys-db psql -U recsys -d youtube_recsys -c "SELECT COUNT(*) FROM user_interactions;"
+```
 
 ## Project Structure
 
 ```
 youtube-recsys/
 ├── sql/
-│   └── schema.sql          # Database schema
-├── data/                   # Data files (Phase 2)
-├── features/               # Feature engineering (Phase 3)
-├── models/                 # ML models (Phase 4-5)
-├── serving/                # FastAPI app (Phase 6)
-├── ui/                     # Streamlit app (Phase 10)
-├── pipelines/              # Airflow DAGs (Phase 8)
-├── monitoring/             # Grafana dashboards (Phase 9)
-├── tests/                  # Tests
-├── notebooks/              # Jupyter notebooks
+│   └── schema.sql              # Database schema
+├── data/
+│   ├── scraper/
+│   │   ├── youtube_scraper.py  # Single video/search scraper
+│   │   └── batch_scraper.py    # Multi-category batch scraper
+│   ├── simulator/
+│   │   └── user_simulator.py   # User behavior simulator
+│   └── raw/                    # Scraped data (gitignored)
+├── scripts/
+│   └── load_data.py            # Load data into PostgreSQL
+├── features/                   # Feature engineering (Phase 3)
+├── models/                     # ML models (Phase 4-5)
+├── serving/                    # FastAPI app (Phase 6)
+├── ui/                         # Streamlit app (Phase 10)
+├── pipelines/                  # Airflow DAGs (Phase 8)
+├── monitoring/                 # Grafana dashboards (Phase 9)
+├── tests/                      # Tests
+├── notebooks/                  # Jupyter notebooks
 ├── docker-compose.yml
 ├── requirements.txt
 └── README.md
