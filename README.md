@@ -8,6 +8,9 @@ A production-grade video recommendation system using two-tower architecture with
 - [x] Phase 2: Data pipeline (scraper + simulator)
 - [x] Phase 3: Feature engineering (CLIP + transformers)
 - [x] Phase 4: Two-tower retrieval model with FAISS
+- [x] Phase 5: Ranking and re-ranking models
+- [x] Phase 6: FastAPI serving layer
+- [ ] Phase 4: Two-tower retrieval model with FAISS
 - [ ] Phase 5: Ranking and re-ranking models
 - [ ] Phase 6: FastAPI serving layer
 - [ ] Phase 7: Chatbot functionality
@@ -160,6 +163,91 @@ service.load("models/retrieval/saved/simple_faiss_index")
 video_ids, scores = service.retrieve(user_embedding, k=100)
 ```
 
+## Ranking & Re-ranking
+
+### Test Ranking Model
+
+```bash
+python -m models.ranking.ranking_model
+```
+
+### Test Re-ranking Model
+
+```bash
+python -m models.reranking.reranking_model
+```
+
+### Full Pipeline
+
+```python
+from models.pipeline import RecommendationPipeline
+
+# Initialize pipeline
+pipeline = RecommendationPipeline(
+    retrieval_model_path="models/retrieval/saved/simple_faiss_index"
+)
+
+# Get recommendations for a user
+recommendations = pipeline.recommend(user_id, k=20)
+```
+
+## API Server
+
+### Start the API
+
+```bash
+# Install FastAPI dependencies
+pip install fastapi uvicorn
+
+# Start server
+python -m serving.api.main
+
+# Or with uvicorn directly
+uvicorn serving.api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | API info |
+| `/health` | GET | Health check |
+| `/stats` | GET | System statistics |
+| `/recommend` | POST | Get recommendations |
+| `/recommend/{user_id}` | GET | Get recommendations (GET) |
+| `/feedback` | POST | Submit user feedback |
+| `/videos/{video_id}` | GET | Get video details |
+| `/users/{user_id}/history` | GET | Get user watch history |
+
+### Example API Calls
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Get stats
+curl http://localhost:8000/stats
+
+# Get recommendations
+curl -X POST http://localhost:8000/recommend \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "your-user-id", "num_recommendations": 10}'
+
+# Get recommendations (GET)
+curl "http://localhost:8000/recommend/your-user-id?n=10"
+
+# Submit feedback
+curl -X POST http://localhost:8000/feedback \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "user-id", "video_id": "video-id", "interaction_type": "view", "watch_percentage": 0.8}'
+```
+
+### API Documentation
+
+Once the server is running, visit:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
 ## Project Structure
 
 ```
@@ -177,10 +265,19 @@ youtube-recsys/
 │   ├── video_encoder.py        # CLIP + Sentence Transformers
 │   └── user_encoder.py         # User history aggregation
 ├── models/
-│   └── retrieval/
-│       ├── two_tower.py        # Two-tower model architecture
-│       ├── faiss_index.py      # FAISS index manager
-│       └── retrieval_service.py # Retrieval service
+│   ├── retrieval/
+│   │   ├── two_tower.py        # Two-tower model architecture
+│   │   ├── faiss_index.py      # FAISS index manager
+│   │   └── retrieval_service.py # Retrieval service
+│   ├── ranking/
+│   │   └── ranking_model.py    # Deep Cross Network ranker
+│   ├── reranking/
+│   │   └── reranking_model.py  # Diversity & business rules
+│   └── pipeline.py             # Full recommendation pipeline
+├── serving/
+│   └── api/
+│       ├── main.py             # FastAPI application
+│       └── schemas.py          # Pydantic models
 ├── scripts/
 │   ├── load_data.py            # Load data into PostgreSQL
 │   ├── generate_embeddings.py  # Generate and store embeddings
