@@ -36,6 +36,7 @@ from serving.api.schemas import (
 )
 from models.retrieval import SimpleRetrievalService
 from models.reranking import ReRankingPipeline, VideoCandidate
+from serving.chatbot import chatbot_router
 
 load_dotenv()
 
@@ -124,6 +125,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include chatbot router
+app.include_router(chatbot_router)
 
 
 # ============================================

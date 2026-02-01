@@ -10,6 +10,7 @@ A production-grade video recommendation system using two-tower architecture with
 - [x] Phase 4: Two-tower retrieval model with FAISS
 - [x] Phase 5: Ranking and re-ranking models
 - [x] Phase 6: FastAPI serving layer
+- [x] Phase 7: Chatbot functionality
 - [ ] Phase 4: Two-tower retrieval model with FAISS
 - [ ] Phase 5: Ranking and re-ranking models
 - [ ] Phase 6: FastAPI serving layer
@@ -248,6 +249,81 @@ Once the server is running, visit:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 
+## Chatbot
+
+The chatbot provides a conversational interface for video recommendations.
+
+### Setup LLM
+
+**Option 1: Ollama (FREE - Recommended)**
+
+Ollama runs open-source LLMs locally on your machine for free.
+
+```bash
+# 1. Install Ollama from https://ollama.ai
+
+# 2. Start Ollama server
+ollama serve
+
+# 3. Pull a model (in another terminal)
+ollama pull llama3.2      # Good balance of speed/quality
+# OR
+ollama pull llama3.2:1b   # Smaller, faster
+# OR
+ollama pull mistral       # Alternative good model
+```
+
+The chatbot will auto-detect Ollama and use it!
+
+**Option 2: Paid APIs (Optional)**
+
+Set API keys in `.env`:
+
+```bash
+# For OpenAI
+OPENAI_API_KEY=your-openai-key
+
+# Or for Anthropic
+ANTHROPIC_API_KEY=your-anthropic-key
+```
+
+**Option 3: Mock (Default fallback)**
+
+Without Ollama or API keys, the chatbot uses a mock LLM for basic responses.
+
+### Chatbot API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/chat/` | POST | Send a message |
+| `/chat/history/{session_id}` | GET | Get chat history |
+| `/chat/history/{session_id}` | DELETE | Clear session |
+
+### Example Chat
+
+```bash
+# Start a conversation
+curl -X POST http://localhost:8000/chat/ \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello!", "user_id": "your-user-id"}'
+
+# Continue conversation (use session_id from previous response)
+curl -X POST http://localhost:8000/chat/ \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Recommend some videos", "session_id": "xxx", "user_id": "your-user-id"}'
+
+# Search for videos
+curl -X POST http://localhost:8000/chat/ \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Find videos about machine learning", "session_id": "xxx"}'
+```
+
+### Test Chatbot Locally
+
+```bash
+python -m serving.chatbot.chatbot_service
+```
+
 ## Project Structure
 
 ```
@@ -275,9 +351,13 @@ youtube-recsys/
 │   │   └── reranking_model.py  # Diversity & business rules
 │   └── pipeline.py             # Full recommendation pipeline
 ├── serving/
-│   └── api/
-│       ├── main.py             # FastAPI application
-│       └── schemas.py          # Pydantic models
+│   ├── api/
+│   │   ├── main.py             # FastAPI application
+│   │   └── schemas.py          # Pydantic models
+│   └── chatbot/
+│       ├── llm_client.py       # LLM provider clients
+│       ├── chatbot_service.py  # Chatbot logic
+│       └── routes.py           # Chat API routes
 ├── scripts/
 │   ├── load_data.py            # Load data into PostgreSQL
 │   ├── generate_embeddings.py  # Generate and store embeddings
