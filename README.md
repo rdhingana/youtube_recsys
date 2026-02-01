@@ -6,8 +6,8 @@ A production-grade video recommendation system using two-tower architecture with
 
 - [x] Phase 1: Initial project setup with PostgreSQL schema
 - [x] Phase 2: Data pipeline (scraper + simulator)
-- [ ] Phase 3: Feature engineering (CLIP + transformers)
-- [ ] Phase 4: Two-tower retrieval model with FAISS
+- [x] Phase 3: Feature engineering (CLIP + transformers)
+- [x] Phase 4: Two-tower retrieval model with FAISS
 - [ ] Phase 5: Ranking and re-ranking models
 - [ ] Phase 6: FastAPI serving layer
 - [ ] Phase 7: Chatbot functionality
@@ -97,6 +97,69 @@ sudo docker exec -it youtube-recsys-db psql -U recsys -d youtube_recsys -c "SELE
 sudo docker exec -it youtube-recsys-db psql -U recsys -d youtube_recsys -c "SELECT COUNT(*) FROM user_interactions;"
 ```
 
+## Feature Engineering
+
+### Generate Video Embeddings
+
+```bash
+# Generate embeddings for all videos (with thumbnails - slower)
+python scripts/generate_embeddings.py --videos
+
+# Generate embeddings without thumbnails (faster)
+python scripts/generate_embeddings.py --videos --skip-thumbnails
+
+# Limit to first 100 videos
+python scripts/generate_embeddings.py --videos --limit 100 --skip-thumbnails
+```
+
+### Generate User Embeddings
+
+```bash
+# Generate embeddings for all users
+python scripts/generate_embeddings.py --users
+
+# Generate all embeddings
+python scripts/generate_embeddings.py --all --skip-thumbnails
+
+# Check embedding stats
+python scripts/generate_embeddings.py --stats
+```
+
+## Retrieval Model
+
+### Build FAISS Index (Quick Start)
+
+```bash
+# Build index from embeddings (no training required)
+python scripts/build_index.py --test
+
+# Specify index type
+python scripts/build_index.py --index-type IVF --test
+```
+
+### Train Two-Tower Model
+
+```bash
+# Train the two-tower retrieval model
+python scripts/train_retrieval.py --epochs 10 --batch-size 256
+
+# Evaluate only (if model already trained)
+python scripts/train_retrieval.py --eval-only
+```
+
+### Test Retrieval
+
+```python
+from models.retrieval import SimpleRetrievalService
+
+# Load service
+service = SimpleRetrievalService()
+service.load("models/retrieval/saved/simple_faiss_index")
+
+# Get recommendations
+video_ids, scores = service.retrieve(user_embedding, k=100)
+```
+
 ## Project Structure
 
 ```
@@ -110,9 +173,19 @@ youtube-recsys/
 │   ├── simulator/
 │   │   └── user_simulator.py   # User behavior simulator
 │   └── raw/                    # Scraped data (gitignored)
+├── features/
+│   ├── video_encoder.py        # CLIP + Sentence Transformers
+│   └── user_encoder.py         # User history aggregation
+├── models/
+│   └── retrieval/
+│       ├── two_tower.py        # Two-tower model architecture
+│       ├── faiss_index.py      # FAISS index manager
+│       └── retrieval_service.py # Retrieval service
 ├── scripts/
-│   └── load_data.py            # Load data into PostgreSQL
-├── features/                   # Feature engineering (Phase 3)
+│   ├── load_data.py            # Load data into PostgreSQL
+│   ├── generate_embeddings.py  # Generate and store embeddings
+│   ├── build_index.py          # Build FAISS index
+│   └── train_retrieval.py      # Train two-tower model
 ├── models/                     # ML models (Phase 4-5)
 ├── serving/                    # FastAPI app (Phase 6)
 ├── ui/                         # Streamlit app (Phase 10)

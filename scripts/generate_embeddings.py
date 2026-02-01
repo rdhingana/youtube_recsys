@@ -217,6 +217,15 @@ def generate_user_embeddings(limit: int = None):
     # Initialize encoder
     encoder = UserEncoder(embedding_dim=256)
     
+    def parse_embedding(emb):
+        """Parse embedding from string or list format."""
+        if emb is None:
+            return None
+        if isinstance(emb, str):
+            emb = emb.strip('[]')
+            emb = [float(x) for x in emb.split(',')]
+        return np.array(emb, dtype=np.float32)
+    
     success_count = 0
     
     for user_id in tqdm(user_ids, desc="Encoding users"):
@@ -228,9 +237,16 @@ def generate_user_embeddings(limit: int = None):
                 # No history, create zero embedding
                 embedding = np.zeros(256)
             else:
-                embeddings = [np.array(row[3]) for row in history if row[3] is not None]
-                watch_pcts = [row[1] or 0.5 for row in history]
-                interaction_types = [row[2] for row in history]
+                embeddings = []
+                watch_pcts = []
+                interaction_types = []
+                
+                for row in history:
+                    parsed_emb = parse_embedding(row[3])
+                    if parsed_emb is not None:
+                        embeddings.append(parsed_emb)
+                        watch_pcts.append(row[1] or 0.5)
+                        interaction_types.append(row[2])
                 
                 if embeddings:
                     embedding = encoder.encode_user(
