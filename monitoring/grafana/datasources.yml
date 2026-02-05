@@ -1,0 +1,28 @@
+# Grafana Datasource Provisioning
+# Connects directly to PostgreSQL
+
+apiVersion: 1
+
+datasources:
+  # PostgreSQL - Direct connection to RecSys database
+  - name: PostgreSQL
+    type: postgres
+    url: localhost:5432
+    database: youtube_recsys
+    user: recsys
+    secureJsonData:
+      password: recsys_password
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+    isDefault: true
+    editable: true
+
+  # Prometheus - Optional for real-time API metrics
+  - name: Prometheus
+    type: prometheus
+    url: http://localhost:9090
+    isDefault: false
+    editable: true

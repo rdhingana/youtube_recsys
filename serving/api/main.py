@@ -18,6 +18,7 @@ import psycopg2
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+from prometheus_fastapi_instrumentator import Instrumentator
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -37,6 +38,20 @@ from serving.api.schemas import (
 from models.retrieval import SimpleRetrievalService
 from models.reranking import ReRankingPipeline, VideoCandidate
 from serving.chatbot import chatbot_router
+from monitoring import (
+    RECOMMENDATIONS_SERVED,
+    RECOMMENDATIONS_LATENCY,
+    RETRIEVAL_CANDIDATES,
+    FEEDBACK_RECEIVED,
+    TOTAL_VIDEOS,
+    TOTAL_USERS,
+    TOTAL_INTERACTIONS,
+    FAISS_INDEX_SIZE,
+    record_recommendation_latency,
+    record_feedback,
+    update_system_metrics,
+    set_service_info,
+)
 
 load_dotenv()
 
@@ -84,6 +99,9 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting YouTube RecSys API...")
     
+    # Set service info
+    set_service_info(version=API_VERSION, environment=os.getenv("ENVIRONMENT", "development"))
+    
     # Initialize retrieval service
     try:
         index_path = Path(INDEX_PATH)
@@ -91,6 +109,9 @@ async def lifespan(app: FastAPI):
             retrieval_service = SimpleRetrievalService(embedding_dim=256)
             retrieval_service.load(str(index_path))
             logger.info(f"Loaded retrieval service from {index_path}")
+            
+            # Update FAISS index size metric
+            FAISS_INDEX_SIZE.set(retrieval_service.index.num_vectors)
         else:
             logger.warning(f"Index not found at {index_path}. Run build_index.py first.")
     except Exception as e:
@@ -99,6 +120,20 @@ async def lifespan(app: FastAPI):
     # Initialize re-ranking pipeline
     reranking_pipeline = ReRankingPipeline()
     logger.info("Initialized re-ranking pipeline")
+    
+    # Update initial system metrics
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM videos WHERE is_active = true")
+                videos = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM users")
+                users = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM user_interactions")
+                interactions = cur.fetchone()[0]
+                update_system_metrics(videos, users, interactions)
+    except Exception as e:
+        logger.warning(f"Could not load initial metrics: {e}")
     
     yield
     
@@ -125,6 +160,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Prometheus metrics instrumentation
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 # Include chatbot router
 app.include_router(chatbot_router)
@@ -308,21 +346,24 @@ async def get_recommendations(request: RecommendationRequest):
         k=min(500, request.num_recommendations * 10),
         exclude_video_ids=exclude_ids,
     )
-    retrieval_time = (time.time() - retrieval_start) * 1000
+    retrieval_time = (time.time() - retrieval_start)
+    record_recommendation_latency("retrieval", retrieval_time)
+    RETRIEVAL_CANDIDATES.observe(len(retrieved_ids))
     
     if not retrieved_ids:
         return RecommendationResponse(
             user_id=request.user_id,
             recommendations=[],
             num_results=0,
-            retrieval_time_ms=retrieval_time,
+            retrieval_time_ms=retrieval_time * 1000,
             total_time_ms=(time.time() - start_time) * 1000,
         )
     
     # Stage 2: Ranking (using retrieval scores for now)
     ranking_start = time.time()
     ranked = list(zip(retrieved_ids, retrieval_scores.tolist()))
-    ranking_time = (time.time() - ranking_start) * 1000
+    ranking_time = (time.time() - ranking_start)
+    record_recommendation_latency("ranking", ranking_time)
     
     # Stage 3: Re-ranking
     reranking_start = time.time()
@@ -347,7 +388,8 @@ async def get_recommendations(request: RecommendationRequest):
     
     # Apply re-ranking
     reranked = reranking_pipeline.rerank(candidates, k=request.num_recommendations)
-    reranking_time = (time.time() - reranking_start) * 1000
+    reranking_time = (time.time() - reranking_start)
+    record_recommendation_latency("reranking", reranking_time)
     
     # Build response
     recommendations = []
@@ -368,16 +410,20 @@ async def get_recommendations(request: RecommendationRequest):
             score=candidate.score,
         ))
     
-    total_time = (time.time() - start_time) * 1000
+    total_time = (time.time() - start_time)
+    record_recommendation_latency("total", total_time)
+    
+    # Record recommendation served
+    RECOMMENDATIONS_SERVED.labels(user_type="known").inc()
     
     return RecommendationResponse(
         user_id=request.user_id,
         recommendations=recommendations,
         num_results=len(recommendations),
-        retrieval_time_ms=retrieval_time,
-        ranking_time_ms=ranking_time,
-        reranking_time_ms=reranking_time,
-        total_time_ms=total_time,
+        retrieval_time_ms=retrieval_time * 1000,
+        ranking_time_ms=ranking_time * 1000,
+        reranking_time_ms=reranking_time * 1000,
+        total_time_ms=total_time * 1000,
     )
 
 
@@ -413,6 +459,9 @@ async def submit_feedback(request: FeedbackRequest):
                     request.watch_percentage,
                 ))
                 conn.commit()
+        
+        # Record feedback metric
+        record_feedback(request.interaction_type)
         
         return FeedbackResponse(status="success", message="Feedback recorded")
     except Exception as e:

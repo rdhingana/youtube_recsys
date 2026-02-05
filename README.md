@@ -12,6 +12,7 @@ A production-grade video recommendation system using two-tower architecture with
 - [x] Phase 6: FastAPI serving layer
 - [x] Phase 7: Chatbot functionality
 - [x] Phase 8: Airflow orchestration
+- [x] Phase 9: Prometheus and Grafana monitoring
 - [ ] Phase 4: Two-tower retrieval model with FAISS
 - [ ] Phase 5: Ranking and re-ranking models
 - [ ] Phase 6: FastAPI serving layer
@@ -384,6 +385,55 @@ airflow tasks list daily_data_refresh
 ./scripts/stop_airflow.sh
 ```
 
+## Monitoring (Grafana + PostgreSQL + Prometheus)
+
+**Two data sources:**
+- **PostgreSQL** → Business metrics (videos, users, interactions)
+- **Prometheus** → Real-time API metrics (latency, request rates)
+
+### Setup Monitoring
+
+```bash
+chmod +x scripts/setup_monitoring.sh
+./scripts/setup_monitoring.sh
+```
+
+### Access URLs
+
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| Grafana | http://localhost:3000 | admin/admin |
+| Prometheus | http://localhost:9090 | - |
+| API Metrics | http://localhost:8000/metrics | - |
+
+### Configure Datasources in Grafana
+
+**1. PostgreSQL (for business metrics):**
+- Go to: Connections → Data Sources → Add
+- Select: PostgreSQL
+- Host: `host.docker.internal:5432`
+- Database: `youtube_recsys`
+- User: `recsys` / Password: `recsys_password`
+- TLS/SSL Mode: `disable`
+
+**2. Prometheus (for API metrics):**
+- Go to: Connections → Data Sources → Add
+- Select: Prometheus
+- URL: `http://prometheus:9090`
+
+### Import Dashboards
+
+| Dashboard | Source | Shows |
+|-----------|--------|-------|
+| `postgres_dashboard.json` | PostgreSQL | Videos, users, categories, top content |
+| `api_metrics_dashboard.json` | Prometheus | Latency, request rates, feedback events |
+
+### Stop Monitoring
+
+```bash
+cd monitoring && docker-compose down
+```
+
 ## Project Structure
 
 ```
@@ -423,6 +473,12 @@ youtube-recsys/
 │       ├── daily_data_refresh.py    # Daily scraping DAG
 │       ├── embedding_generation.py  # Embedding DAG
 │       └── model_retraining.py      # Weekly training DAG
+├── monitoring/
+│   ├── metrics.py                   # Custom Prometheus metrics
+│   ├── prometheus/
+│   │   └── prometheus.yml           # Prometheus config
+│   └── grafana/
+│       └── dashboards/              # Grafana dashboards
 ├── scripts/
 │   ├── load_data.py            # Load data into PostgreSQL
 │   ├── generate_embeddings.py  # Generate and store embeddings
