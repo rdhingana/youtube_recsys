@@ -75,3 +75,5 @@ prometheus_data/
 *.pem
 *.keypipelines/airflow.db
 pipelines/logs/
+monitoring/prometheus/data/
+monitoring/grafana/data/
