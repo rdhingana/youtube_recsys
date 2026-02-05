@@ -72,4 +72,5 @@ prometheus_data/
 
 # Secrets
 *.pem
-*.key
+*.keypipelines/airflow.db
+pipelines/logs/
