@@ -78,4 +78,4 @@ pipelines/logs/
 
 
 # Monitoring
-*.monitoring/prometheus/data
+*.monitoring/prometheus/data/
