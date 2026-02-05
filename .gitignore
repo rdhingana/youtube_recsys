@@ -75,3 +75,7 @@ prometheus_data/
 *.pem
 *.keypipelines/airflow.db
 pipelines/logs/
+
+
+# Monitoring
+*.monitoring/prometheus/data
