@@ -13,13 +13,7 @@ A production-grade video recommendation system using two-tower architecture with
 - [x] Phase 7: Chatbot functionality
 - [x] Phase 8: Airflow orchestration
 - [x] Phase 9: Prometheus and Grafana monitoring
-- [ ] Phase 4: Two-tower retrieval model with FAISS
-- [ ] Phase 5: Ranking and re-ranking models
-- [ ] Phase 6: FastAPI serving layer
-- [ ] Phase 7: Chatbot functionality
-- [ ] Phase 8: Airflow orchestration
-- [ ] Phase 9: Prometheus and Grafana monitoring
-- [ ] Phase 10: Streamlit UI
+- [x] Phase 10: Streamlit UI
 - [ ] Phase 11: Final polish
 
 ## Tech Stack
@@ -434,6 +428,50 @@ chmod +x scripts/setup_monitoring.sh
 cd monitoring && docker-compose down
 ```
 
+## Streamlit UI
+
+Interactive web interface for the recommendation system.
+
+### Start the UI
+
+```bash
+# Install Streamlit
+pip install streamlit plotly
+
+# Make sure API is running first
+uvicorn serving.api.main:app --host 0.0.0.0 --port 8000
+
+# Start Streamlit (in another terminal)
+chmod +x scripts/start_ui.sh
+./scripts/start_ui.sh
+
+# Or run directly
+streamlit run ui/app.py
+```
+
+### Access the UI
+
+Open http://localhost:8501 in your browser.
+
+### Features
+
+| Page | Description |
+|------|-------------|
+| **Home** | Overview and quick stats |
+| **Recommendations** | Get personalized video recommendations |
+| **Browse Videos** | Explore the video catalog with filters |
+| **Chat** | Conversational interface with AI assistant |
+| **Analytics** | Interactive charts and statistics |
+
+### Screenshots
+
+The UI includes:
+- Video grid with thumbnails
+- User selection for personalization
+- Real-time recommendation timing metrics
+- Interactive Plotly charts
+- Category and interaction breakdown
+
 ## Project Structure
 
 ```
@@ -479,6 +517,13 @@ youtube-recsys/
 │   │   └── prometheus.yml           # Prometheus config
 │   └── grafana/
 │       └── dashboards/              # Grafana dashboards
+├── ui/
+│   ├── app.py                       # Main Streamlit app
+│   └── pages/
+│       ├── recommendations.py       # Recommendations page
+│       ├── browse.py                # Browse videos page
+│       ├── chat.py                  # Chat interface
+│       └── analytics.py             # Analytics dashboard
 ├── scripts/
 │   ├── load_data.py            # Load data into PostgreSQL
 │   ├── generate_embeddings.py  # Generate and store embeddings
