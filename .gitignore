@@ -1,40 +1,77 @@
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.so
 .Python
-*.egg-info/
-dist/
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Environment
+# Virtual environments
 .env
-.venv/
+.venv
+env/
 venv/
+ENV/
 
-# Data files
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data files (will be generated)
 data/raw/
+data/processed/
+*.csv
 *.json
+*.parquet
+*.pkl
+*.wal
 
-# Models
-models/retrieval/saved/
-*.pt
+# Model files
+models/*.pt
+models/*.pth
+models/*.bin
 *.faiss
-*.meta
 
 # Logs
 logs/
 *.log
 
-# Airflow
-pipelines/airflow.db
-pipelines/logs/
-pipelines/airflow.cfg
-pipelines/webserver_config.py
-
-# IDE
-.vscode/
-.idea/
-
-# Docker
+# Docker volumes
 postgres_data/
+redis_data/
+grafana_data/
+prometheus_data/
+
+# Secrets
+*.pem
+*.keypipelines/airflow.db
+pipelines/logs/
