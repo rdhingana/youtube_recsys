@@ -37,11 +37,13 @@ CREATE TABLE videos (
 CREATE TABLE users (
     user_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     username VARCHAR(50) UNIQUE NOT NULL,
+    persona_type VARCHAR(50),              -- ADD THIS LINE
     preferred_categories INTEGER[],
     account_age_days INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
 
 -- User interactions: watch history, likes, etc.
 CREATE TABLE user_interactions (

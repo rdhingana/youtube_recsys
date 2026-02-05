@@ -28,7 +28,7 @@ with col1:
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
         cur.execute("""
-            SELECT u.user_id, u.persona_type, COUNT(ui.id) as interactions
+            SELECT u.user_id, u.persona_type, COUNT(ui.interaction_id) as interactions
             FROM users u
             LEFT JOIN user_interactions ui ON u.user_id = ui.user_id
             GROUP BY u.user_id, u.persona_type
