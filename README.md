@@ -11,6 +11,7 @@ A production-grade video recommendation system using two-tower architecture with
 - [x] Phase 5: Ranking and re-ranking models
 - [x] Phase 6: FastAPI serving layer
 - [x] Phase 7: Chatbot functionality
+- [x] Phase 8: Airflow orchestration
 - [ ] Phase 4: Two-tower retrieval model with FAISS
 - [ ] Phase 5: Ranking and re-ranking models
 - [ ] Phase 6: FastAPI serving layer
@@ -324,6 +325,65 @@ curl -X POST http://localhost:8000/chat/ \
 python -m serving.chatbot.chatbot_service
 ```
 
+## Airflow Orchestration
+
+Airflow automates the data pipelines for scraping, embedding generation, and model retraining.
+
+### Setup Airflow (WSL)
+
+```bash
+# Install Airflow
+pip install apache-airflow==2.8.0
+
+# Make scripts executable
+chmod +x scripts/setup_airflow.sh scripts/start_airflow.sh scripts/stop_airflow.sh
+
+# Initialize Airflow (creates database and admin user)
+./scripts/setup_airflow.sh
+```
+
+### Start Airflow
+
+```bash
+# Start Airflow (scheduler + webserver in background)
+./scripts/start_airflow.sh
+```
+
+### Access Airflow UI
+
+- URL: http://localhost:8080
+- Username: `admin`
+- Password: `admin`
+
+### Available DAGs
+
+| DAG | Schedule | Description |
+|-----|----------|-------------|
+| `daily_data_refresh` | 2 AM daily | Scrapes new videos, simulates interactions |
+| `embedding_generation` | 4 AM daily | Generates embeddings for new data |
+| `model_retraining` | 6 AM Sundays | Retrains the two-tower model |
+
+### Manual DAG Trigger
+
+```bash
+export AIRFLOW_HOME=$(pwd)/pipelines
+
+# Trigger a DAG manually
+airflow dags trigger daily_data_refresh
+
+# List DAGs
+airflow dags list
+
+# Check task status
+airflow tasks list daily_data_refresh
+```
+
+### Stop Airflow
+
+```bash
+./scripts/stop_airflow.sh
+```
+
 ## Project Structure
 
 ```
@@ -358,6 +418,11 @@ youtube-recsys/
 │       ├── llm_client.py       # LLM provider clients
 │       ├── chatbot_service.py  # Chatbot logic
 │       └── routes.py           # Chat API routes
+├── pipelines/
+│   └── dags/
+│       ├── daily_data_refresh.py    # Daily scraping DAG
+│       ├── embedding_generation.py  # Embedding DAG
+│       └── model_retraining.py      # Weekly training DAG
 ├── scripts/
 │   ├── load_data.py            # Load data into PostgreSQL
 │   ├── generate_embeddings.py  # Generate and store embeddings
