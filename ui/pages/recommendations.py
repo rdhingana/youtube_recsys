@@ -1,30 +1,57 @@
 """
-Recommendations Page
-
-Get personalized video recommendations.
+Recommendations - Get personalized video suggestions
 """
 
 import streamlit as st
 import requests
+import psycopg2
+import pandas as pd
 import os
 from dotenv import load_dotenv
+
+st.set_page_config(page_title="Recommendations | YouTube RecSys", page_icon="🎯", layout="wide")
+
+st.markdown("""
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0e1117 0%, #1a1a2e 100%);
+    }
+    .video-card img {
+        border-radius: 8px;
+        width: 100%;
+        aspect-ratio: 16/9;
+        object-fit: cover;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 load_dotenv()
 
 API_URL = os.getenv("API_URL", "http://localhost:8000")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://recsys:recsys_password@localhost:5432/youtube_recsys")
 
-st.title("🎯 Personalized Recommendations")
+with st.sidebar:
+    st.markdown("## 🎬 YouTube RecSys")
+    st.caption("Video Recommendation System")
+
+
+def get_thumbnail(video_id: str) -> str:
+    """Get YouTube thumbnail - try multiple quality levels"""
+    return f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg"
+
+
+st.markdown("# 🎯 Recommendations")
+st.caption("Get personalized video suggestions based on user preferences")
 st.markdown("---")
 
-# User selection
 col1, col2 = st.columns([2, 1])
 
+selected_user_id = None
+
 with col1:
-    # Get users from database
     try:
-        import psycopg2
-        DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://recsys:recsys_password@localhost:5432/youtube_recsys")
-        
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
         cur.execute("""
@@ -38,119 +65,100 @@ with col1:
         users = cur.fetchall()
         conn.close()
         
-        user_options = {f"{u[1]} - {u[0][:8]}... ({u[2]} interactions)": u[0] for u in users}
-        
-        if user_options:
-            selected_user_label = st.selectbox(
-                "Select a user",
-                options=list(user_options.keys()),
-                help="Choose a user to get personalized recommendations"
-            )
+        if users:
+            user_options = {f"{u[1] or 'Unknown'} ({u[2]:,} interactions)": u[0] for u in users}
+            selected_user_label = st.selectbox("Select a user profile", options=list(user_options.keys()))
             selected_user_id = user_options[selected_user_label]
-        else:
-            st.warning("No users found. Run the data pipeline first.")
-            selected_user_id = None
             
     except Exception as e:
         st.error(f"Database error: {e}")
-        selected_user_id = None
 
 with col2:
-    num_recommendations = st.slider("Number of recommendations", 5, 50, 20)
-    exclude_watched = st.checkbox("Exclude watched videos", value=True)
+    num_recommendations = st.slider("Number of results", 4, 48, 20, step=4)
+    exclude_watched = st.checkbox("Exclude watched videos", value=False)
 
 st.markdown("---")
 
-# Get recommendations button
-if selected_user_id and st.button("🎬 Get Recommendations", type="primary"):
-    with st.spinner("Fetching recommendations..."):
-        try:
-            response = requests.post(
-                f"{API_URL}/recommend",
-                json={
-                    "user_id": selected_user_id,
-                    "num_recommendations": num_recommendations,
-                    "exclude_watched": exclude_watched,
-                },
-                timeout=30,
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                recommendations = data.get("recommendations", [])
-                
-                # Display timing info
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Retrieval", f"{data.get('retrieval_time_ms', 0):.1f}ms")
-                col2.metric("Ranking", f"{data.get('ranking_time_ms', 0):.1f}ms")
-                col3.metric("Re-ranking", f"{data.get('reranking_time_ms', 0):.1f}ms")
-                col4.metric("Total", f"{data.get('total_time_ms', 0):.1f}ms")
-                
-                st.markdown("---")
-                st.subheader(f"📺 {len(recommendations)} Recommendations")
-                
-                # Display recommendations in grid
-                cols = st.columns(4)
-                for idx, video in enumerate(recommendations):
-                    with cols[idx % 4]:
-                        with st.container():
-                            # Thumbnail
-                            if video.get("thumbnail_url"):
-                                st.image(video["thumbnail_url"], use_container_width=True)
-                            else:
-                                st.image("https://via.placeholder.com/320x180?text=No+Thumbnail", use_container_width=True)
-                            
-                            # Title
-                            title = video.get("title", "Unknown Title")
-                            if len(title) > 50:
-                                title = title[:47] + "..."
-                            st.markdown(f"**{title}**")
-                            
-                            # Channel and score
-                            channel = video.get("channel_name", "Unknown")
-                            score = video.get("score", 0)
-                            st.caption(f"📺 {channel}")
-                            st.caption(f"⭐ Score: {score:.3f}")
-                            
-                            # Category
-                            if video.get("category_name"):
-                                st.caption(f"🏷️ {video['category_name']}")
-                            
-                            st.markdown("---")
-            else:
-                st.error(f"API Error: {response.status_code} - {response.text}")
-                
-        except requests.exceptions.ConnectionError:
-            st.error("Could not connect to API. Make sure the API server is running:")
-            st.code("uvicorn serving.api.main:app --host 0.0.0.0 --port 8000")
-        except Exception as e:
-            st.error(f"Error: {e}")
-
-# Show user's watch history
 if selected_user_id:
-    with st.expander("📜 User's Watch History"):
+    if st.button("🚀 Get Recommendations", type="primary", use_container_width=True):
+        with st.spinner("Generating recommendations..."):
+            try:
+                response = requests.post(
+                    f"{API_URL}/recommend",
+                    json={
+                        "user_id": selected_user_id, 
+                        "num_recommendations": num_recommendations, 
+                        "exclude_watched": exclude_watched
+                    },
+                    timeout=30,
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    recommendations = data.get("recommendations", [])
+                    
+                    # Performance metrics
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Retrieval", f"{data.get('retrieval_time_ms', 0):.1f}ms")
+                    c2.metric("Ranking", f"{data.get('ranking_time_ms', 0):.1f}ms")
+                    c3.metric("Re-ranking", f"{data.get('reranking_time_ms', 0):.1f}ms")
+                    c4.metric("Total", f"{data.get('total_time_ms', 0):.1f}ms")
+                    
+                    st.markdown("---")
+                    st.markdown(f"### 📺 {len(recommendations)} Results")
+                    
+                    if recommendations:
+                        for row_idx in range(0, len(recommendations), 4):
+                            cols = st.columns(4)
+                            for col_idx, col in enumerate(cols):
+                                video_idx = row_idx + col_idx
+                                if video_idx < len(recommendations):
+                                    video = recommendations[video_idx]
+                                    with col:
+                                        # Thumbnail
+                                        thumb_url = get_thumbnail(video.get("video_id", ""))
+                                        st.image(thumb_url, use_container_width=True)
+                                        
+                                        # Title
+                                        title = video.get("title", "Unknown")[:60]
+                                        if len(video.get("title", "")) > 60:
+                                            title += "..."
+                                        st.markdown(f"**{title}**")
+                                        
+                                        # Meta
+                                        st.caption(f"📺 {video.get('channel_name', 'Unknown')}")
+                                        st.caption(f"⭐ {video.get('score', 0):.3f} · 🏷️ {video.get('category_name', 'N/A')}")
+                                        st.markdown("")
+                    else:
+                        st.info("No recommendations found.")
+                else:
+                    st.error(f"API Error: {response.status_code}")
+                    
+            except requests.exceptions.ConnectionError:
+                st.error("Cannot connect to API. Run: `make start-api`")
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+# Watch history expander
+if selected_user_id:
+    with st.expander("📜 View Watch History"):
         try:
             conn = psycopg2.connect(DATABASE_URL)
             cur = conn.cursor()
             cur.execute("""
-                SELECT v.title, v.channel_name, ui.interaction_type, 
-                       ui.watch_percentage, ui.created_at
-                FROM user_interactions ui
+                SELECT v.title, v.channel_name, ui.interaction_type, ui.watch_percentage
+                FROM user_interactions ui 
                 JOIN videos v ON ui.video_id = v.video_id
-                WHERE ui.user_id = %s
-                ORDER BY ui.created_at DESC
-                LIMIT 20
+                WHERE ui.user_id = %s 
+                ORDER BY ui.created_at DESC LIMIT 20
             """, (selected_user_id,))
             history = cur.fetchall()
             conn.close()
             
             if history:
-                import pandas as pd
-                df = pd.DataFrame(history, columns=["Title", "Channel", "Type", "Watch %", "Date"])
+                df = pd.DataFrame(history, columns=["Title", "Channel", "Type", "Watch %"])
+                df["Title"] = df["Title"].apply(lambda x: x[:40] + "..." if len(str(x)) > 40 else x)
                 df["Watch %"] = df["Watch %"].apply(lambda x: f"{x*100:.0f}%" if x else "-")
-                st.dataframe(df, use_container_width=True)
-            else:
-                st.info("No watch history for this user.")
-                
+                st.dataframe(df, use_container_width=True, hide_index=True)
         except Exception as e:
-            st.error(f"Error loading history: {e}")
+            st.error(f"Error: {e}")

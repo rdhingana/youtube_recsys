@@ -1,7 +1,5 @@
 """
-YouTube RecSys - Streamlit UI
-
-Main application entry point.
+YouTube RecSys - Home
 """
 
 import streamlit as st
@@ -13,131 +11,80 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom CSS
+# CSS
 st.markdown("""
 <style>
-    .video-card {
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        padding: 10px;
-        margin: 5px;
-        background-color: #f9f9f9;
-    }
-    .video-title {
-        font-weight: bold;
-        font-size: 14px;
-        margin-bottom: 5px;
-    }
-    .video-channel {
-        color: #666;
-        font-size: 12px;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        border-radius: 10px;
-        padding: 20px;
-        text-align: center;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0e1117 0%, #1a1a2e 100%);
     }
 </style>
 """, unsafe_allow_html=True)
 
 # Sidebar
-st.sidebar.title("🎬 YouTube RecSys")
-st.sidebar.markdown("---")
+with st.sidebar:
+    st.markdown("## 🎬 YouTube RecSys")
+    st.caption("Video Recommendation System")
 
-# Navigation
-page = st.sidebar.radio(
-    "Navigation",
-    ["🏠 Home", "🎯 Recommendations", "🔍 Browse Videos", "💬 Chat", "📊 Analytics"],
-    index=0,
-)
+# Main
+st.markdown("# 🎬 YouTube RecSys")
+st.caption("Production-Grade Video Recommendation System")
+st.markdown("---")
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("### About")
-st.sidebar.info(
-    "A production-grade video recommendation system with:\n"
-    "- Two-tower retrieval model\n"
-    "- FAISS similarity search\n"
-    "- Deep ranking models\n"
-    "- LLM-powered chatbot"
-)
+# Stats
+try:
+    import psycopg2
+    import os
+    from dotenv import load_dotenv
+    
+    load_dotenv()
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://recsys:recsys_password@localhost:5432/youtube_recsys")
+    
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    
+    cur.execute("SELECT COUNT(*) FROM videos WHERE is_active = true")
+    video_count = cur.fetchone()[0]
+    
+    cur.execute("SELECT COUNT(*) FROM users")
+    user_count = cur.fetchone()[0]
+    
+    cur.execute("SELECT COUNT(*) FROM user_interactions")
+    interaction_count = cur.fetchone()[0]
+    
+    cur.execute("SELECT COUNT(*) FROM video_embeddings")
+    embedding_count = cur.fetchone()[0]
+    
+    conn.close()
+    
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("📹 Videos", f"{video_count:,}")
+    col2.metric("👥 Users", f"{user_count:,}")
+    col3.metric("🎯 Interactions", f"{interaction_count:,}")
+    col4.metric("🧠 Embeddings", f"{embedding_count:,}")
+    
+except Exception as e:
+    st.warning("Database not connected. Run `make start-db`")
 
-# Main content based on navigation
-if page == "🏠 Home":
-    st.title("🎬 YouTube Video Recommendation System")
-    st.markdown("---")
-    
-    st.markdown("""
-    Welcome to the YouTube RecSys demo! This system demonstrates a production-grade 
-    video recommendation pipeline with the following components:
-    
-    ### 🔧 System Architecture
-    
-    1. **Data Pipeline** - Scrapes videos and simulates user behavior
-    2. **Feature Engineering** - CLIP + Sentence Transformers for embeddings
-    3. **Two-Tower Retrieval** - Fast candidate generation with FAISS
-    4. **Ranking Model** - Deep Cross Network for scoring
-    5. **Re-ranking** - Diversity and business rules
-    6. **Chatbot** - LLM-powered conversational interface
-    
-    ### 🚀 Getting Started
-    
-    Use the sidebar to navigate:
-    - **Recommendations** - Get personalized video recommendations
-    - **Browse Videos** - Explore the video catalog
-    - **Chat** - Talk to the AI assistant
-    - **Analytics** - View system statistics
-    """)
-    
-    # Quick stats
-    st.markdown("### 📈 Quick Stats")
-    
-    try:
-        import psycopg2
-        import os
-        from dotenv import load_dotenv
-        
-        load_dotenv()
-        DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://recsys:recsys_password@localhost:5432/youtube_recsys")
-        
-        conn = psycopg2.connect(DATABASE_URL)
-        cur = conn.cursor()
-        
-        cur.execute("SELECT COUNT(*) FROM videos WHERE is_active = true")
-        video_count = cur.fetchone()[0]
-        
-        cur.execute("SELECT COUNT(*) FROM users")
-        user_count = cur.fetchone()[0]
-        
-        cur.execute("SELECT COUNT(*) FROM user_interactions")
-        interaction_count = cur.fetchone()[0]
-        
-        cur.execute("SELECT COUNT(*) FROM video_embeddings")
-        embedding_count = cur.fetchone()[0]
-        
-        conn.close()
-        
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Videos", f"{video_count:,}")
-        col2.metric("Users", f"{user_count:,}")
-        col3.metric("Interactions", f"{interaction_count:,}")
-        col4.metric("Embeddings", f"{embedding_count:,}")
-        
-    except Exception as e:
-        st.warning(f"Could not connect to database: {e}")
-        st.info("Make sure PostgreSQL is running and the database is initialized.")
+st.markdown("---")
 
-elif page == "🎯 Recommendations":
-    exec(open("ui/pages/recommendations.py").read())
+# Features
+col1, col2, col3, col4 = st.columns(4)
 
-elif page == "🔍 Browse Videos":
-    exec(open("ui/pages/browse.py").read())
+with col1:
+    st.markdown("### 🎯 Recommendations")
+    st.caption("Personalized suggestions using two-tower retrieval + deep ranking")
 
-elif page == "💬 Chat":
-    exec(open("ui/pages/chat.py").read())
+with col2:
+    st.markdown("### 🔍 Browse")
+    st.caption("Explore the catalog with filters and search")
 
-elif page == "📊 Analytics":
-    exec(open("ui/pages/analytics.py").read())
+with col3:
+    st.markdown("### 💬 Chat")
+    st.caption("AI assistant powered by local LLM")
+
+with col4:
+    st.markdown("### 📊 Analytics")
+    st.caption("System metrics and statistics")

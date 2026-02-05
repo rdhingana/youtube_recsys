@@ -1,225 +1,176 @@
 """
-Analytics Page
-
-System statistics and visualizations.
+Analytics - System metrics and statistics
 """
 
 import streamlit as st
 import psycopg2
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+st.set_page_config(page_title="Analytics | YouTube RecSys", page_icon="📊", layout="wide")
 
+st.markdown("""
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0e1117 0%, #1a1a2e 100%);
+    }
+</style>
+""", unsafe_allow_html=True)
+
+load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://recsys:recsys_password@localhost:5432/youtube_recsys")
 
-st.title("📊 Analytics Dashboard")
+with st.sidebar:
+    st.markdown("## 🎬 YouTube RecSys")
+    st.caption("Video Recommendation System")
+
+st.markdown("# 📊 Analytics")
+st.caption("System metrics and content statistics")
 st.markdown("---")
 
 try:
     conn = psycopg2.connect(DATABASE_URL)
-    
-    # ==========================================
-    # Key Metrics
-    # ==========================================
-    st.subheader("📈 Key Metrics")
-    
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
     cur = conn.cursor()
     
+    # Key metrics
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
     cur.execute("SELECT COUNT(*) FROM videos WHERE is_active = true")
-    total_videos = cur.fetchone()[0]
+    col1.metric("📹 Videos", f"{cur.fetchone()[0]:,}")
     
     cur.execute("SELECT COUNT(*) FROM users")
-    total_users = cur.fetchone()[0]
+    col2.metric("👥 Users", f"{cur.fetchone()[0]:,}")
     
     cur.execute("SELECT COUNT(*) FROM user_interactions")
-    total_interactions = cur.fetchone()[0]
+    col3.metric("🎯 Interactions", f"{cur.fetchone()[0]:,}")
     
     cur.execute("SELECT COUNT(*) FROM video_embeddings")
-    videos_with_emb = cur.fetchone()[0]
+    col4.metric("🧠 Video Emb.", f"{cur.fetchone()[0]:,}")
     
     cur.execute("SELECT COUNT(*) FROM user_embeddings")
-    users_with_emb = cur.fetchone()[0]
-    
-    col1.metric("Videos", f"{total_videos:,}")
-    col2.metric("Users", f"{total_users:,}")
-    col3.metric("Interactions", f"{total_interactions:,}")
-    col4.metric("Video Embeddings", f"{videos_with_emb:,}")
-    col5.metric("User Embeddings", f"{users_with_emb:,}")
+    col5.metric("🧠 User Emb.", f"{cur.fetchone()[0]:,}")
     
     st.markdown("---")
     
-    # ==========================================
-    # Charts Row 1
-    # ==========================================
+    # Charts row 1
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("📁 Videos by Category")
+        st.markdown("### Videos by Category")
         cur.execute("""
-            SELECT COALESCE(category_name, 'Unknown') as category, COUNT(*) as count 
-            FROM videos 
-            WHERE is_active = true 
-            GROUP BY category_name 
-            ORDER BY count DESC
-            LIMIT 10
+            SELECT COALESCE(category_name, 'Unknown'), COUNT(*) 
+            FROM videos WHERE is_active = true 
+            GROUP BY category_name ORDER BY COUNT(*) DESC
         """)
-        category_data = cur.fetchall()
-        
-        if category_data:
-            df = pd.DataFrame(category_data, columns=["Category", "Count"])
-            fig = px.pie(df, values="Count", names="Category", hole=0.4)
-            fig.update_layout(margin=dict(t=0, b=0, l=0, r=0))
+        data = cur.fetchall()
+        if data:
+            df = pd.DataFrame(data, columns=["Category", "Count"])
+            fig = px.pie(df, values="Count", names="Category", hole=0.4,
+                        color_discrete_sequence=px.colors.sequential.Purples_r)
+            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), 
+                            paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#ccc'))
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No category data available")
     
     with col2:
-        st.subheader("🎯 Interactions by Type")
+        st.markdown("### Interaction Types")
         cur.execute("""
-            SELECT interaction_type, COUNT(*) as count 
-            FROM user_interactions 
-            GROUP BY interaction_type 
-            ORDER BY count DESC
+            SELECT interaction_type, COUNT(*) 
+            FROM user_interactions GROUP BY interaction_type ORDER BY COUNT(*) DESC
         """)
-        interaction_data = cur.fetchall()
-        
-        if interaction_data:
-            df = pd.DataFrame(interaction_data, columns=["Type", "Count"])
-            fig = px.bar(df, x="Type", y="Count", color="Type")
-            fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), showlegend=False)
+        data = cur.fetchall()
+        if data:
+            df = pd.DataFrame(data, columns=["Type", "Count"])
+            fig = px.bar(df, x="Type", y="Count", color="Type",
+                        color_discrete_sequence=px.colors.sequential.Purples_r)
+            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), 
+                            paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#ccc'),
+                            showlegend=False, xaxis_title="", yaxis_title="")
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No interaction data available")
     
     st.markdown("---")
     
-    # ==========================================
-    # Charts Row 2
-    # ==========================================
+    # Charts row 2
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("👥 Users by Persona")
+        st.markdown("### Users by Persona")
         cur.execute("""
-            SELECT persona_type, COUNT(*) as count 
-            FROM users 
-            GROUP BY persona_type 
-            ORDER BY count DESC
+            SELECT COALESCE(persona_type, 'Unknown'), COUNT(*) 
+            FROM users GROUP BY persona_type ORDER BY COUNT(*) DESC
         """)
-        persona_data = cur.fetchall()
-        
-        if persona_data:
-            df = pd.DataFrame(persona_data, columns=["Persona", "Count"])
-            fig = px.bar(df, x="Persona", y="Count", color="Persona")
-            fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), showlegend=False)
+        data = cur.fetchall()
+        if data:
+            df = pd.DataFrame(data, columns=["Persona", "Count"])
+            fig = px.bar(df, x="Persona", y="Count", color="Persona",
+                        color_discrete_sequence=px.colors.sequential.Tealgrn_r)
+            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), 
+                            paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#ccc'),
+                            showlegend=False, xaxis_title="", yaxis_title="")
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No user data available")
     
     with col2:
-        st.subheader("📊 Watch Percentage Distribution")
+        st.markdown("### Watch Completion")
         cur.execute("""
             SELECT 
                 CASE 
-                    WHEN watch_percentage < 0.25 THEN '0-25%'
-                    WHEN watch_percentage < 0.50 THEN '25-50%'
-                    WHEN watch_percentage < 0.75 THEN '50-75%'
-                    ELSE '75-100%'
-                END as bucket,
-                COUNT(*) as count
-            FROM user_interactions
-            WHERE watch_percentage IS NOT NULL
-            GROUP BY bucket
-            ORDER BY bucket
+                    WHEN watch_percentage < 0.25 THEN '0-25%' 
+                    WHEN watch_percentage < 0.50 THEN '25-50%' 
+                    WHEN watch_percentage < 0.75 THEN '50-75%' 
+                    ELSE '75-100%' 
+                END, COUNT(*)
+            FROM user_interactions WHERE watch_percentage IS NOT NULL 
+            GROUP BY 1 ORDER BY 1
         """)
-        watch_data = cur.fetchall()
-        
-        if watch_data:
-            df = pd.DataFrame(watch_data, columns=["Watch %", "Count"])
-            fig = px.bar(df, x="Watch %", y="Count", color="Watch %")
-            fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), showlegend=False)
+        data = cur.fetchall()
+        if data:
+            df = pd.DataFrame(data, columns=["Range", "Count"])
+            fig = px.bar(df, x="Range", y="Count", color="Range",
+                        color_discrete_sequence=['#ef4444', '#f97316', '#eab308', '#22c55e'])
+            fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), 
+                            paper_bgcolor='rgba(0,0,0,0)', font=dict(color='#ccc'),
+                            showlegend=False, xaxis_title="", yaxis_title="")
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No watch data available")
     
     st.markdown("---")
     
-    # ==========================================
-    # Interactions Over Time
-    # ==========================================
-    st.subheader("📅 Interactions Over Time")
-    
-    cur.execute("""
-        SELECT DATE(created_at) as date, COUNT(*) as count
-        FROM user_interactions
-        WHERE created_at > NOW() - INTERVAL '30 days'
-        GROUP BY DATE(created_at)
-        ORDER BY date
-    """)
-    time_data = cur.fetchall()
-    
-    if time_data:
-        df = pd.DataFrame(time_data, columns=["Date", "Interactions"])
-        fig = px.area(df, x="Date", y="Interactions")
-        fig.update_layout(margin=dict(t=0, b=0, l=0, r=0))
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No time series data available")
-    
-    st.markdown("---")
-    
-    # ==========================================
-    # Top Content
-    # ==========================================
+    # Tables
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("🔥 Most Watched Videos")
+        st.markdown("### 🔥 Most Watched")
         cur.execute("""
-            SELECT v.title, v.channel_name, COUNT(ui.id) as watches
-            FROM videos v
-            JOIN user_interactions ui ON v.video_id = ui.video_id
-            WHERE ui.interaction_type = 'view'
-            GROUP BY v.video_id, v.title, v.channel_name
-            ORDER BY watches DESC
-            LIMIT 10
+            SELECT v.title, v.channel_name, COUNT(*) as views
+            FROM videos v 
+            JOIN user_interactions ui ON v.video_id = ui.video_id 
+            WHERE ui.interaction_type = 'view' 
+            GROUP BY v.video_id, v.title, v.channel_name 
+            ORDER BY views DESC LIMIT 8
         """)
-        top_videos = cur.fetchall()
-        
-        if top_videos:
-            df = pd.DataFrame(top_videos, columns=["Title", "Channel", "Watches"])
-            df["Title"] = df["Title"].apply(lambda x: x[:40] + "..." if len(x) > 40 else x)
+        data = cur.fetchall()
+        if data:
+            df = pd.DataFrame(data, columns=["Title", "Channel", "Views"])
+            df["Title"] = df["Title"].apply(lambda x: x[:30] + "..." if len(str(x)) > 30 else x)
             st.dataframe(df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No watch data available")
     
     with col2:
-        st.subheader("⭐ Most Active Users")
+        st.markdown("### ⭐ Most Active Users")
         cur.execute("""
-            SELECT u.user_id, u.persona_type, COUNT(ui.id) as interactions
-            FROM users u
-            LEFT JOIN user_interactions ui ON u.user_id = ui.user_id
-            GROUP BY u.user_id, u.persona_type
-            ORDER BY interactions DESC
-            LIMIT 10
+            SELECT u.persona_type, COUNT(*) as interactions
+            FROM users u 
+            JOIN user_interactions ui ON u.user_id = ui.user_id 
+            GROUP BY u.user_id, u.persona_type 
+            ORDER BY interactions DESC LIMIT 8
         """)
-        top_users = cur.fetchall()
-        
-        if top_users:
-            df = pd.DataFrame(top_users, columns=["User ID", "Persona", "Interactions"])
-            df["User ID"] = df["User ID"].apply(lambda x: x[:8] + "...")
+        data = cur.fetchall()
+        if data:
+            df = pd.DataFrame(data, columns=["Persona", "Interactions"])
             st.dataframe(df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No user data available")
     
     conn.close()
 
 except Exception as e:
     st.error(f"Database error: {e}")
-    st.info("Make sure PostgreSQL is running and the database is initialized.")

@@ -1,147 +1,122 @@
 """
-Chat Page
-
-Conversational interface for recommendations.
+Chat - Talk to the AI assistant
 """
 
 import streamlit as st
 import requests
+import psycopg2
 import os
 from dotenv import load_dotenv
 
+st.set_page_config(page_title="Chat | YouTube RecSys", page_icon="💬", layout="wide")
+
+st.markdown("""
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0e1117 0%, #1a1a2e 100%);
+    }
+</style>
+""", unsafe_allow_html=True)
+
 load_dotenv()
-
 API_URL = os.getenv("API_URL", "http://localhost:8000")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://recsys:recsys_password@localhost:5432/youtube_recsys")
 
-st.title("💬 Chat with RecSys")
-st.markdown("---")
+# Session state
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "session_id" not in st.session_state:
+    st.session_state.session_id = None
 
-# Initialize session state
-if "chat_messages" not in st.session_state:
-    st.session_state.chat_messages = []
-
-if "chat_session_id" not in st.session_state:
-    st.session_state.chat_session_id = None
-
-if "chat_user_id" not in st.session_state:
-    st.session_state.chat_user_id = None
-
-# Sidebar for user selection
+# Sidebar
 with st.sidebar:
-    st.subheader("Chat Settings")
+    st.markdown("## 🎬 YouTube RecSys")
+    st.caption("Video Recommendation System")
+    st.markdown("---")
+    st.markdown("### Chat Settings")
     
-    # Get users for personalization
     try:
-        import psycopg2
-        DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://recsys:recsys_password@localhost:5432/youtube_recsys")
-        
         conn = psycopg2.connect(DATABASE_URL)
         cur = conn.cursor()
-        cur.execute("""
-            SELECT user_id, persona_type 
-            FROM users 
-            ORDER BY created_at DESC 
-            LIMIT 20
-        """)
+        cur.execute("SELECT user_id, persona_type FROM users LIMIT 15")
         users = cur.fetchall()
         conn.close()
         
-        user_options = {"Anonymous": None}
-        user_options.update({f"{u[1]} - {u[0][:8]}...": u[0] for u in users})
+        user_options = {"Guest": None}
+        user_options.update({f"{u[1] or 'User'} ({str(u[0])[:6]}...)": u[0] for u in users})
         
-        selected_user_label = st.selectbox(
-            "Chat as user",
-            options=list(user_options.keys()),
-            help="Select a user for personalized recommendations"
-        )
-        st.session_state.chat_user_id = user_options[selected_user_label]
-        
-    except Exception as e:
-        st.warning(f"Could not load users: {e}")
-        st.session_state.chat_user_id = None
+        selected_user = st.selectbox("Chat as", list(user_options.keys()))
+        user_id = user_options[selected_user]
+    except:
+        user_id = None
     
-    if st.button("🗑️ Clear Chat"):
-        st.session_state.chat_messages = []
-        st.session_state.chat_session_id = None
+    st.markdown("")
+    if st.button("🗑️ Clear Chat", use_container_width=True):
+        st.session_state.messages = []
+        st.session_state.session_id = None
         st.rerun()
 
-# Display chat messages
-for message in st.session_state.chat_messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# Main content
+st.markdown("# 💬 Chat")
+st.caption("Ask for recommendations or search for videos")
+st.markdown("---")
+
+# Display messages
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
 
 # Chat input
-if prompt := st.chat_input("Ask for recommendations or search for videos..."):
-    # Add user message
-    st.session_state.chat_messages.append({"role": "user", "content": prompt})
+if prompt := st.chat_input("Ask something..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
     
     with st.chat_message("user"):
         st.markdown(prompt)
     
-    # Get response from API
     with st.chat_message("assistant"):
         with st.spinner("Thinking..."):
             try:
                 response = requests.post(
                     f"{API_URL}/chat/",
                     json={
-                        "message": prompt,
-                        "session_id": st.session_state.chat_session_id,
-                        "user_id": st.session_state.chat_user_id,
+                        "message": prompt, 
+                        "session_id": st.session_state.session_id, 
+                        "user_id": str(user_id) if user_id else None
                     },
                     timeout=60,
                 )
                 
                 if response.status_code == 200:
                     data = response.json()
-                    assistant_response = data.get("response", "Sorry, I couldn't process that.")
-                    st.session_state.chat_session_id = data.get("session_id")
-                    
-                    st.markdown(assistant_response)
-                    st.session_state.chat_messages.append({
-                        "role": "assistant",
-                        "content": assistant_response
-                    })
+                    reply = data.get("response", "Sorry, something went wrong.")
+                    st.session_state.session_id = data.get("session_id")
+                    st.markdown(reply)
+                    st.session_state.messages.append({"role": "assistant", "content": reply})
                 else:
-                    error_msg = f"Sorry, I encountered an error (Status: {response.status_code})"
-                    st.error(error_msg)
-                    st.session_state.chat_messages.append({
-                        "role": "assistant",
-                        "content": error_msg
-                    })
-                    
+                    st.error(f"Error: {response.status_code}")
             except requests.exceptions.ConnectionError:
-                error_msg = "Could not connect to the API. Make sure the server is running."
-                st.error(error_msg)
-                st.code("uvicorn serving.api.main:app --host 0.0.0.0 --port 8000")
-                st.session_state.chat_messages.append({
-                    "role": "assistant",
-                    "content": error_msg
-                })
+                st.error("Cannot connect to API. Run: `make start-api`")
             except Exception as e:
-                error_msg = f"Error: {str(e)}"
-                st.error(error_msg)
-                st.session_state.chat_messages.append({
-                    "role": "assistant",
-                    "content": error_msg
-                })
+                st.error(str(e))
 
-# Example prompts
-if not st.session_state.chat_messages:
-    st.markdown("### 💡 Try asking:")
-    
-    col1, col2 = st.columns(2)
+# Empty state
+if not st.session_state.messages:
+    st.markdown("")
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown("""
-        - "Hello!"
-        - "Recommend some videos for me"
-        - "Find videos about machine learning"
-        """)
-    
+        st.markdown("**💡 Try asking:**")
+        st.caption("• Hello!")
+        st.caption("• Recommend videos for me")
+        
     with col2:
-        st.markdown("""
-        - "Search for Python tutorials"
-        - "What gaming videos do you have?"
-        - "Show me music videos"
-        """)
+        st.markdown("**🔍 Search:**")
+        st.caption("• Find Python tutorials")
+        st.caption("• Search machine learning")
+        
+    with col3:
+        st.markdown("**❓ Questions:**")
+        st.caption("• What can you do?")
+        st.caption("• Show me gaming videos")
