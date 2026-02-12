@@ -29,7 +29,7 @@ dag = DAG(
     schedule_interval='0 6 * * 0',  # Run at 6 AM every Sunday
     start_date=days_ago(7),
     catchup=False,
-    tags=['ml', 'training', 'weekly'],
+    tags=['recsys','ml', 'training', 'weekly'],
 )
 
 

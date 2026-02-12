@@ -5,24 +5,39 @@
   <img src="https://img.shields.io/badge/FastAPI-0.100+-green.svg" alt="FastAPI">
   <img src="https://img.shields.io/badge/PostgreSQL-16-blue.svg" alt="PostgreSQL">
   <img src="https://img.shields.io/badge/PyTorch-2.0+-red.svg" alt="PyTorch">
+  <img src="https://img.shields.io/badge/Whisper-Speech--to--Text-orange.svg" alt="Whisper">
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
 </p>
 
 <p align="center">
-  A production-grade video recommendation system featuring two-tower architecture, multi-stage ranking, LLM-powered chatbot, and real-time monitoring.
+  A production-grade video recommendation system featuring two-tower retrieval, multi-stage ranking, LLM-powered voice chatbot, real-time feedback loop, and comprehensive monitoring.
 </p>
 
 ---
 
 ## ✨ Features
 
+### 🎯 Core ML Pipeline
 - **Two-Tower Retrieval** — CLIP & Sentence Transformer embeddings with FAISS indexing
-- **Multi-Stage Ranking** — Deep Cross Network + diversity-aware re-ranking
-- **LLM Chatbot** — Conversational recommendations via Ollama (free, local)
-- **Real-time API** — FastAPI with Prometheus metrics
-- **Orchestration** — Airflow DAGs for automated pipelines
-- **Monitoring** — Grafana dashboards for business & API metrics
-- **Interactive UI** — Streamlit interface for exploration
+- **Multi-Stage Ranking** — Deep Cross Network (DCN) for precise scoring
+- **Diversity Re-ranking** — Ensures varied, engaging recommendations
+
+### 🖥️ Interactive UI
+- **Netflix-Style Onboarding** — Pick categories, get instant recommendations
+- **Real-time Feedback Loop** — 👍/👎 buttons to refine suggestions
+- **Voice Chat** — Speech-to-text (Whisper) + text-to-speech
+- **User Journey Analytics** — Sankey diagrams & co-watching patterns
+
+### 🤖 AI Chatbot
+- **Conversational Recommendations** — Natural language video search
+- **Local LLM** — Powered by Ollama (Llama 3.2, Mistral) — free & private
+- **Voice Input/Output** — Speak questions, hear responses
+
+### 📊 Production Features
+- **Real-time API** — FastAPI with sub-100ms latency
+- **Prometheus Metrics** — Request tracking, latency percentiles
+- **Grafana Dashboards** — Business & API monitoring
+- **Airflow Orchestration** — Automated daily pipelines
 
 ---
 
@@ -32,34 +47,38 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                              Streamlit UI                               │
 │                           (localhost:8501)                              │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │
-┌─────────────────────────────────▼───────────────────────────────────────┐
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │
+│  │    Home      │  │   Recommend  │  │    Chat      │  │  Analytics  │  │
+│  │  Dashboard   │  │  + Feedback  │  │  + Voice     │  │  + Sankey   │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  └─────────────┘  │
+└─────────────────────────────────────┬───────────────────────────────────┘
+                                      │
+┌─────────────────────────────────────▼───────────────────────────────────┐
 │                             FastAPI Server                              │
 │                           (localhost:8000)                              │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌─────────────┐  │
 │  │ /recommend   │  │   /chat      │  │  /feedback   │  │  /metrics   │  │
 │  └──────────────┘  └──────────────┘  └──────────────┘  └─────────────┘  │
-└─────────────────────────────────┬───────────────────────────────────────┘
-                                  │
-        ┌─────────────────────────┼─────────────────────────┐
-        │                         │                         │
-        ▼                         ▼                         ▼
-┌───────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│   Retrieval   │       │     Ranking     │       │   Re-ranking    │
-│  (Two-Tower)  │──────▶│  (Deep Cross)   │──────▶│   (Diversity)   │
-│    + FAISS    │       │                 │       │                 │
-└───────────────┘       └─────────────────┘       └─────────────────┘
-        │                         │                         │
-        └─────────────────────────┼─────────────────────────┘
-                                  │
-        ┌─────────────────────────┼─────────────────────────┐
-        │                         │                         │
-        ▼                         ▼                         ▼
-┌───────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│  PostgreSQL   │       │     Ollama      │       │   Prometheus    │
-│  + pgvector   │       │   (LLM Chat)    │       │   + Grafana     │
-└───────────────┘       └─────────────────┘       └─────────────────┘
+└─────────────────────────────────────┬───────────────────────────────────┘
+                                      │
+        ┌─────────────────────────────┼─────────────────────────────────┐
+        │                             │                             │
+        ▼                             ▼                             ▼
+┌───────────────┐       ┌─────────────────────┐       ┌─────────────────┐
+│   Retrieval   │       │      Ranking        │       │   Re-ranking    │
+│  (Two-Tower)  │──────▶│   (Deep Cross)      │──────▶│   (Diversity)   │
+│    + FAISS    │       │                     │       │                 │
+└───────────────┘       └─────────────────────┘       └─────────────────┘
+        │                             │                             │
+        └─────────────────────────────┼─────────────────────────────┘
+                                      │
+        ┌─────────────────────────────┼─────────────────────────────┐
+        │                             │                             │
+        ▼                             ▼                             ▼
+┌───────────────┐       ┌─────────────────────┐       ┌─────────────────┐
+│  PostgreSQL   │       │      Ollama         │       │   Prometheus    │
+│  + pgvector   │       │   (LLM + Whisper)   │       │   + Grafana     │
+└───────────────┘       └─────────────────────┘       └─────────────────┘
 ```
 
 ---
@@ -68,9 +87,9 @@
 
 ### Prerequisites
 
-- Docker & Docker Compose
 - Python 3.10+
-- [Ollama](https://ollama.ai) (optional, for chatbot)
+- Docker & Docker Compose
+- [Ollama](https://ollama.ai) (for chatbot)
 
 ### 1. Clone & Setup
 
@@ -84,7 +103,7 @@ make install
 ### 2. Start Services
 
 ```bash
-# Start PostgreSQL, monitoring, and Airflow
+# Start all background services (DB, monitoring, Airflow)
 make start-all
 
 # In separate terminals:
@@ -98,9 +117,13 @@ make start-ui     # Streamlit → http://localhost:8501
 make pipeline     # load-data → generate-embeddings → build-index → train
 ```
 
-### 4. (Optional) Enable Chatbot
+### 4. Enable Voice & Chatbot
 
 ```bash
+# Install voice support
+pip install openai-whisper audio-recorder-streamlit
+
+# Start Ollama for chatbot
 ollama serve
 ollama pull llama3.2
 ```
@@ -110,48 +133,27 @@ ollama pull llama3.2
 ## 📋 Available Commands
 
 ```bash
-make help         # Show all commands
-
-# Setup
-make install           # Install Python dependencies
-make setup-airflow     # Initialize Airflow
-make setup-monitoring  # Setup Grafana + Prometheus
+make help              # Show all commands
 
 # Services
-make start-db          # PostgreSQL (port 5432)
+make start-all         # Start PostgreSQL, Airflow, Prometheus, Grafana
 make start-api         # FastAPI (port 8000)
 make start-ui          # Streamlit (port 8501)
-make start-airflow     # Airflow (port 8080)
-make start-monitoring  # Grafana (3001) + Prometheus (9090)
-make start-all         # Start all background services
-
 make stop-all          # Stop everything
 make status            # Check what's running
 
 # ML Pipeline
-make load-data              # Load videos & simulate users
-make generate-embeddings    # Generate CLIP/text embeddings
-make build-index            # Build FAISS index
-make train                  # Train two-tower model
-make pipeline               # Run full pipeline
+make pipeline          # Run full pipeline
+make load-data         # Load videos & simulate users
+make generate-embeddings
+make build-index       # Build FAISS index
+make train             # Train two-tower model
+
+# Development
+make test              # Run tests
+make lint              # Run linter
+make clean             # Clean cache files
 ```
-
----
-
-## 🔌 API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/stats` | GET | System statistics |
-| `/recommend` | POST | Get recommendations |
-| `/recommend/{user_id}` | GET | Get recommendations |
-| `/chat/` | POST | Chat with AI assistant |
-| `/videos/{video_id}` | GET | Video details |
-| `/feedback` | POST | Submit interaction |
-| `/metrics` | GET | Prometheus metrics |
-
-**API Docs:** http://localhost:8000/docs
 
 ---
 
@@ -165,6 +167,21 @@ make pipeline               # Run full pipeline
 | **Airflow** | http://localhost:8080 | admin / admin |
 | **Grafana** | http://localhost:3001 | admin / admin |
 | **Prometheus** | http://localhost:9090 | — |
+
+---
+
+## 🔌 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/stats` | GET | System statistics |
+| `/recommend` | POST | Get personalized recommendations |
+| `/recommend/{user_id}` | GET | Get recommendations for user |
+| `/chat/` | POST | Chat with AI assistant |
+| `/videos/{video_id}` | GET | Video details |
+| `/feedback` | POST | Submit user feedback |
+| `/metrics` | GET | Prometheus metrics |
 
 ---
 
@@ -192,8 +209,12 @@ youtube_recsys/
 │   ├── prometheus/        # Metrics collection
 │   └── grafana/           # Dashboards
 ├── ui/
-│   ├── app.py             # Streamlit main
-│   └── pages/             # UI pages
+│   ├── Home.py            # Streamlit main
+│   └── pages/
+│       ├── 1_🎯_Recommendations.py  
+│       ├── 2_🔍_Browse.py
+│       ├── 3_💬_Chat.py            
+│       └── 4_📊_Analytics.py        
 ├── scripts/               # Pipeline scripts
 ├── sql/                   # Database schema
 ├── tests/                 # Test suite
@@ -213,13 +234,37 @@ youtube_recsys/
 | **ML Models** | PyTorch, CLIP, Sentence Transformers |
 | **Vector Search** | FAISS |
 | **LLM** | Ollama (Llama 3.2, Mistral) |
+| **Speech-to-Text** | OpenAI Whisper (local) |
+| **Text-to-Speech** | Web Speech API |
 | **Orchestration** | Apache Airflow |
 | **Monitoring** | Prometheus + Grafana |
 | **UI** | Streamlit + Plotly |
 
 ---
 
-## 📊 Airflow DAGs
+## 📊 UI Features
+
+### 🎯 Recommendations Page
+- **Existing User Mode** — Select user profile, get personalized recommendations
+- **Quick Start (Guest)** — Netflix-style category picker for new users
+- **Feedback Loop** — 👍/👎 buttons on every video
+- **Performance Metrics** — Retrieval, ranking, re-ranking latency
+
+### 💬 Chat Page
+- **Voice Input** — Click 🎤 to speak (Whisper transcription)
+- **Voice Output** — Toggle "Read responses aloud" for TTS
+- **Quick Suggestions** — Pre-built prompts for common queries
+- **Context-Aware** — Maintains conversation history
+
+### 📊 Analytics Page
+- **Sankey Diagram** — User journey: Persona → Category → Interaction
+- **Co-Watching Patterns** — "Users who watch X also watch Y"
+- **Category Distribution** — Pie chart of content
+- **Engagement Metrics** — Watch completion rates
+
+---
+
+## 📅 Airflow DAGs
 
 | DAG | Schedule | Description |
 |-----|----------|-------------|
@@ -229,20 +274,8 @@ youtube_recsys/
 
 ---
 
-## 🔧 Configuration
-
-Copy `.env.example` to `.env` and configure:
-
-```bash
-# Database
-POSTGRES_USER=recsys
-POSTGRES_PASSWORD=recsys_password
-POSTGRES_DB=youtube_recsys
-
-# LLM (optional - Ollama auto-detected)
-OPENAI_API_KEY=sk-...        # Optional
-ANTHROPIC_API_KEY=sk-...     # Optional
-```
+# API
+API_URL=http://localhost:8000
 
 ---
 
@@ -250,7 +283,7 @@ ANTHROPIC_API_KEY=sk-...     # Optional
 
 ```bash
 make test         # Run tests
-make lint         # Run linter
+make lint         # Run linter  
 make format       # Format code
 make clean        # Clean cache files
 make logs-airflow # Tail Airflow logs
@@ -258,12 +291,22 @@ make logs-airflow # Tail Airflow logs
 
 ---
 
-## 📝 License
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
 
 MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
 <p align="center">
-  Built with ❤️ using PyTorch, FastAPI, and Streamlit
+  Built with ❤️ using PyTorch, FastAPI, Streamlit, and Whisper
 </p>

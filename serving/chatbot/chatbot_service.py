@@ -17,6 +17,7 @@ import uuid
 
 import numpy as np
 import psycopg2
+from psycopg2 import pool
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -31,6 +32,41 @@ logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://recsys:recsys_password@localhost:5432/youtube_recsys")
 INDEX_PATH = os.getenv("INDEX_PATH", "models/retrieval/saved/simple_faiss_index")
+
+
+# ============================================
+# Database Connection Pool
+# ============================================
+
+_connection_pool = None
+
+def get_connection_pool():
+    """Get or create database connection pool."""
+    global _connection_pool
+    if _connection_pool is None:
+        try:
+            _connection_pool = psycopg2.pool.SimpleConnectionPool(
+                minconn=1,
+                maxconn=10,
+                dsn=DATABASE_URL
+            )
+            logger.info("Database connection pool created")
+        except Exception as e:
+            logger.error(f"Failed to create connection pool: {e}")
+            raise
+    return _connection_pool
+
+
+def get_connection():
+    """Get a connection from the pool."""
+    pool = get_connection_pool()
+    return pool.getconn()
+
+
+def return_connection(conn):
+    """Return a connection to the pool."""
+    pool = get_connection_pool()
+    pool.putconn(conn)
 
 
 # ============================================
@@ -91,11 +127,8 @@ class VideoInfo:
 # Database Functions
 # ============================================
 
-def get_connection():
-    return psycopg2.connect(DATABASE_URL)
-
-
 def parse_embedding(emb):
+    """Parse embedding from database format."""
     if emb is None:
         return None
     if isinstance(emb, str):
@@ -116,32 +149,83 @@ def search_videos_by_text(query: str, limit: int = 10) -> List[VideoInfo]:
     """
     
     pattern = f"%{query}%"
+    conn = None
     
-    with get_connection() as conn:
+    try:
+        conn = get_connection()
         with conn.cursor() as cur:
             cur.execute(search_query, (pattern, pattern, pattern, limit))
-            return [
+            results = [
                 VideoInfo(
                     video_id=row[0],
                     title=row[1],
                     channel_name=row[2],
                     category_name=row[3],
-                    description=row[4][:200] if row[4] else None,
+                    description=row[4][:200].rsplit(' ', 1)[0] + '...' if row[4] and len(row[4]) > 200 else row[4],
                 )
                 for row in cur.fetchall()
             ]
+            return results
+    except Exception as e:
+        logger.error(f"Error searching videos: {e}")
+        return []
+    finally:
+        if conn:
+            return_connection(conn)
+
+
+def get_popular_videos(limit: int = 10) -> List[VideoInfo]:
+    """Get popular videos as fallback recommendations."""
+    query = """
+        SELECT video_id, title, channel_name, category_name, description
+        FROM videos
+        WHERE is_active = true
+        ORDER BY view_count DESC NULLS LAST
+        LIMIT %s
+    """
+    
+    conn = None
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute(query, (limit,))
+            results = [
+                VideoInfo(
+                    video_id=row[0],
+                    title=row[1],
+                    channel_name=row[2],
+                    category_name=row[3],
+                    description=row[4][:200].rsplit(' ', 1)[0] + '...' if row[4] and len(row[4]) > 200 else row[4],
+                )
+                for row in cur.fetchall()
+            ]
+            return results
+    except Exception as e:
+        logger.error(f"Error getting popular videos: {e}")
+        return []
+    finally:
+        if conn:
+            return_connection(conn)
 
 
 def get_user_embedding(user_id: str) -> Optional[np.ndarray]:
     """Get user embedding."""
     query = "SELECT user_embedding FROM user_embeddings WHERE user_id = %s"
+    conn = None
     
-    with get_connection() as conn:
+    try:
+        conn = get_connection()
         with conn.cursor() as cur:
             cur.execute(query, (user_id,))
             row = cur.fetchone()
             if row and row[0]:
                 return parse_embedding(row[0])
+    except Exception as e:
+        logger.error(f"Error getting user embedding: {e}")
+    finally:
+        if conn:
+            return_connection(conn)
+    
     return None
 
 
@@ -157,48 +241,63 @@ def get_video_info(video_ids: List[str]) -> List[VideoInfo]:
         WHERE video_id IN ({placeholders})
     """
     
-    with get_connection() as conn:
+    conn = None
+    try:
+        conn = get_connection()
         with conn.cursor() as cur:
             cur.execute(query, video_ids)
-            return [
+            results = [
                 VideoInfo(
                     video_id=row[0],
                     title=row[1],
                     channel_name=row[2],
                     category_name=row[3],
-                    description=row[4][:200] if row[4] else None,
+                    description=row[4][:200].rsplit(' ', 1)[0] + '...' if row[4] and len(row[4]) > 200 else row[4],
                 )
                 for row in cur.fetchall()
             ]
+            return results
+    except Exception as e:
+        logger.error(f"Error getting video info: {e}")
+        return []
+    finally:
+        if conn:
+            return_connection(conn)
 
 
 def save_chat_session(session: ChatSession):
     """Save chat session to database."""
+    conn = None
     try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                # Insert or update session
+        conn = get_connection()
+        with conn.cursor() as cur:
+            # Insert or update session
+            cur.execute("""
+                INSERT INTO chat_sessions (session_id, user_id, started_at)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (session_id) DO NOTHING
+            """, (session.session_id, session.user_id, session.created_at))
+            
+            # Insert messages (only save new ones)
+            for msg in session.messages[-2:]:  # Save last 2 messages (user + assistant)
                 cur.execute("""
-                    INSERT INTO chat_sessions (session_id, user_id, started_at)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (session_id) DO NOTHING
-                """, (session.session_id, session.user_id, session.created_at))
-                
-                # Insert messages
-                for msg in session.messages[-2:]:  # Save last 2 messages (user + assistant)
-                    cur.execute("""
-                        INSERT INTO chat_messages (session_id, role, content, metadata)
-                        VALUES (%s, %s, %s, %s)
-                    """, (
-                        session.session_id,
-                        msg.role,
-                        msg.content,
-                        json.dumps(session.context) if msg.role == "assistant" else None,
-                    ))
-                
-                conn.commit()
+                    INSERT INTO chat_messages (session_id, role, content, metadata)
+                    VALUES (%s, %s, %s, %s)
+                """, (
+                    session.session_id,
+                    msg.role,
+                    msg.content,
+                    json.dumps(session.context) if msg.role == "assistant" else None,
+                ))
+            
+            conn.commit()
     except Exception as e:
         logger.error(f"Error saving chat session: {e}")
+        if conn:
+            conn.rollback()
+    finally:
+        if conn:
+            return_connection(conn)
 
 
 # ============================================
@@ -209,19 +308,21 @@ class IntentDetector:
     """Detect user intent from message."""
     
     SEARCH_PATTERNS = [
-        r"search\s+(?:for\s+)?(.+)",
-        r"find\s+(?:me\s+)?(?:videos?\s+)?(?:about\s+)?(.+)",
-        r"looking\s+for\s+(.+)",
-        r"show\s+me\s+(.+)",
-        r"videos?\s+about\s+(.+)",
+        r"\bsearch\s+(?:for\s+)?(.+)",
+        r"\bfind\s+(?:me\s+)?(?:videos?\s+)?(?:about\s+)?(.+)",
+        r"\blooking\s+for\s+(.+)",
+        r"\bshow\s+(?:me\s+)?(.+?)(?:\s+videos?)?$",
+        r"\bvideos?\s+(?:about|on)\s+(.+)",
+        r"^(.+?)\s+(?:videos?|tutorials?)$",
     ]
     
     RECOMMEND_PATTERNS = [
-        r"recommend",
-        r"suggestion",
-        r"what\s+should\s+i\s+watch",
-        r"something\s+to\s+watch",
-        r"for\s+me",
+        r"\brecommend",
+        r"\bsuggestion",
+        r"\bwhat\s+should\s+i\s+watch",
+        r"\bsomething\s+to\s+watch",
+        r"\brecommend.*videos?",
+        r"\bshow.*recommendations",
     ]
     
     @classmethod
@@ -233,13 +334,16 @@ class IntentDetector:
             Tuple of (intent, query)
             intent: 'search', 'recommend', 'chat'
         """
-        message_lower = message.lower()
+        message_lower = message.lower().strip()
         
-        # Check for search intent
+        # Check for search intent first (more specific)
         for pattern in cls.SEARCH_PATTERNS:
             match = re.search(pattern, message_lower)
             if match:
-                return "search", match.group(1).strip()
+                query = match.group(1).strip()
+                # Filter out generic words that shouldn't trigger search
+                if query and len(query) > 2 and query not in ['me', 'it', 'that', 'this']:
+                    return "search", query
         
         # Check for recommend intent
         for pattern in cls.RECOMMEND_PATTERNS:
@@ -287,7 +391,11 @@ class ChatbotService:
     ) -> ChatSession:
         """Get existing session or create new one."""
         if session_id and session_id in self.sessions:
-            return self.sessions[session_id]
+            session = self.sessions[session_id]
+            # Update user_id if provided and different
+            if user_id and session.user_id != user_id:
+                session.user_id = user_id
+            return session
         
         session_id = session_id or str(uuid.uuid4())
         session = ChatSession(session_id=session_id, user_id=user_id)
@@ -317,18 +425,30 @@ class ChatbotService:
     ) -> List[VideoInfo]:
         """Get personalized recommendations for user."""
         if not self.retrieval_service:
-            return []
+            logger.warning("Retrieval service not available, falling back to popular videos")
+            return get_popular_videos(k)
         
         user_embedding = get_user_embedding(user_id)
         if user_embedding is None:
-            return []
+            logger.info(f"No embedding for user {user_id}, using popular videos")
+            return get_popular_videos(k)
         
-        video_ids, scores = self.retrieval_service.retrieve(user_embedding, k=k)
-        return get_video_info(video_ids)
+        try:
+            video_ids, scores = self.retrieval_service.retrieve(user_embedding, k=k)
+            videos = get_video_info(video_ids)
+            return videos if videos else get_popular_videos(k)
+        except Exception as e:
+            logger.error(f"Error getting personalized recommendations: {e}")
+            return get_popular_videos(k)
     
     def _search_videos(self, query: str, k: int = 10) -> List[VideoInfo]:
         """Search for videos by query."""
-        return search_videos_by_text(query, limit=k)
+        videos = search_videos_by_text(query, limit=k)
+        # Fallback to popular if no results
+        if not videos:
+            logger.info(f"No videos found for query '{query}', using popular videos")
+            videos = get_popular_videos(k)
+        return videos
     
     def chat(
         self,
@@ -347,10 +467,16 @@ class ChatbotService:
         Returns:
             Tuple of (response_text, session)
         """
+        # Validate input
+        if not message or not message.strip():
+            return "Please enter a message.", self.get_or_create_session(session_id, user_id)
+        
+        message = message.strip()
+        
         # Get or create session
         session = self.get_or_create_session(session_id, user_id)
         
-        # Add user message
+        # Add user message to session
         session.messages.append(Message(role="user", content=message))
         
         # Detect intent
@@ -362,31 +488,42 @@ class ChatbotService:
         if intent == "search" and query:
             videos = self._search_videos(query)
             session.context["last_search"] = query
-        elif intent == "recommend" and user_id:
-            videos = self._get_personalized_recommendations(user_id)
-            session.context["last_action"] = "recommend"
+        elif intent == "recommend":
+            # Try personalized first, fall back to popular
+            if user_id:
+                videos = self._get_personalized_recommendations(user_id)
+                session.context["last_action"] = "personalized_recommend"
+            else:
+                videos = get_popular_videos()
+                session.context["last_action"] = "popular_recommend"
         
         # Build messages for LLM
         llm_messages = [Message(role="system", content=SYSTEM_PROMPT)]
         
-        # Add conversation history (last 6 messages)
-        for msg in session.messages[-6:]:
-            llm_messages.append(msg)
-        
-        # Add video context if available
+        # Add video context BEFORE conversation history for better context
         if videos:
             video_context = RECOMMENDATION_PROMPT.format(
-                interests=query or "personalized recommendations",
+                interests=query or "personalized recommendations" if user_id else "popular videos",
                 videos=self._format_videos_for_prompt(videos),
             )
             llm_messages.append(Message(role="system", content=video_context))
+        
+        # Add conversation history (last 6 messages, excluding the current user message)
+        # We already added the current message to session.messages, so we take [-7:-1]
+        # to get the previous 6 messages
+        history_start = max(0, len(session.messages) - 7)
+        for msg in session.messages[history_start:-1]:  # Exclude the last message (current one)
+            llm_messages.append(msg)
+        
+        # Add current user message last
+        llm_messages.append(Message(role="user", content=message))
         
         # Get LLM response
         try:
             response = self.llm_client.chat(llm_messages)
             response_text = response.content
         except Exception as e:
-            logger.error(f"LLM error: {e}")
+            logger.error(f"LLM error: {e}", exc_info=True)
             response_text = "I apologize, but I'm having trouble processing your request. Could you try again?"
         
         # Add assistant response to session
@@ -396,8 +533,11 @@ class ChatbotService:
         if videos:
             session.context["last_videos"] = [v.video_id for v in videos]
         
-        # Save session
-        save_chat_session(session)
+        # Save session to database
+        try:
+            save_chat_session(session)
+        except Exception as e:
+            logger.error(f"Failed to save session: {e}")
         
         return response_text, session
     

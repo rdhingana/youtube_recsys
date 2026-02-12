@@ -28,7 +28,7 @@ dag = DAG(
     schedule_interval='0 4 * * *',  # Run at 4 AM daily (after data refresh)
     start_date=days_ago(1),
     catchup=False,
-    tags=['embeddings', 'ml'],
+    tags=[ 'recsys','embeddings', 'ml'],
 )
 
 

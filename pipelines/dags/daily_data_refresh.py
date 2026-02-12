@@ -29,7 +29,7 @@ dag = DAG(
     schedule_interval='0 2 * * *',  # Run at 2 AM daily
     start_date=days_ago(1),
     catchup=False,
-    tags=['data', 'daily'],
+    tags=['recsys', 'data', 'daily'],
 )
 
 
@@ -108,17 +108,24 @@ def simulate_daily_interactions(**context):
     """Simulate user interactions for the day."""
     import sys
     import os
+    import uuid
     
     project_root = os.path.dirname(os.environ.get('AIRFLOW_HOME', os.getcwd()))
     sys.path.insert(0, project_root)
     
     from scripts.load_data import (
         get_videos_from_db, 
-        insert_users, 
         insert_interactions,
         get_stats
     )
     from data.simulator.user_simulator import UserSimulator
+    
+    # Database connection for fetching existing users
+    import psycopg2
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(project_root, '.env'))
+    
+    DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://recsys:recsys_password@localhost:5432/youtube_recsys")
     
     # Get current stats
     stats = get_stats()
@@ -130,22 +137,124 @@ def simulate_daily_interactions(**context):
         print("No videos in database")
         return 0
     
-    # Simulate a few new users
-    simulator = UserSimulator(videos, seed=int(datetime.now().timestamp()))
-    new_users = simulator.generate_users(5)
-    insert_users(new_users)
+    # Get existing users from database
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
     
-    # Simulate interactions for existing users (1 day)
-    # This is simplified - in production you'd load existing users
+    cur.execute("""
+        SELECT user_id, username, persona_type 
+        FROM users 
+        ORDER BY RANDOM() 
+        LIMIT 20
+    """)
+    existing_users = cur.fetchall()
+    
+    if not existing_users:
+        print("No existing users found. Creating new users...")
+        # Create new users with unique usernames using timestamp
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        simulator = UserSimulator(videos, seed=int(datetime.now().timestamp()))
+        new_users = simulator.generate_users(5)
+        
+        # Make usernames unique by adding timestamp
+        for user in new_users:
+            user['username'] = f"{user['username']}_{timestamp}_{uuid.uuid4().hex[:6]}"
+        
+        # Insert new users with conflict handling
+        for user in new_users:
+            try:
+                cur.execute("""
+                    INSERT INTO users (user_id, username, email, persona_type, preferences, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (username) DO NOTHING
+                """, (
+                    user['user_id'],
+                    user['username'],
+                    user.get('email', f"{user['username']}@example.com"),
+                    user.get('persona_type', 'casual_viewer'),
+                    '{}',
+                    datetime.now()
+                ))
+            except Exception as e:
+                print(f"Error inserting user {user['username']}: {e}")
+                continue
+        
+        conn.commit()
+        
+        # Fetch the newly created users
+        cur.execute("""
+            SELECT user_id, username, persona_type 
+            FROM users 
+            ORDER BY created_at DESC 
+            LIMIT 5
+        """)
+        existing_users = cur.fetchall()
+    
+    print(f"Simulating interactions for {len(existing_users)} users")
+    
+    # Simulate interactions for existing users
+    simulator = UserSimulator(videos, seed=int(datetime.now().timestamp()))
     all_interactions = []
-    for user in new_users:
-        interactions = simulator.simulate_history(user, days=1)
-        all_interactions.extend(interactions)
+    
+    for user_row in existing_users:
+        user_id, username, persona_type = user_row
+        
+        # Create a user dict for the simulator
+        user = {
+            'user_id': user_id,
+            'username': username,
+            'persona_type': persona_type or 'casual_viewer'
+        }
+        
+        try:
+            # Simulate 1 day of interactions (1-5 interactions per user)
+            interactions = simulator.simulate_history(user, days=1)
+            
+            # Limit interactions per user
+            interactions = interactions[:5]
+            all_interactions.extend(interactions)
+            
+        except Exception as e:
+            print(f"Error simulating for user {username}: {e}")
+            continue
+    
+    conn.close()
     
     if all_interactions:
-        count = insert_interactions(all_interactions)
-        print(f"Inserted {count} interactions")
-        return count
+        try:
+            count = insert_interactions(all_interactions)
+            print(f"Inserted {count} interactions")
+            return count
+        except Exception as e:
+            print(f"Error inserting interactions: {e}")
+            # Try inserting one by one to skip duplicates
+            count = 0
+            conn = psycopg2.connect(DATABASE_URL)
+            cur = conn.cursor()
+            
+            for interaction in all_interactions:
+                try:
+                    cur.execute("""
+                        INSERT INTO user_interactions 
+                        (user_id, video_id, interaction_type, watch_percentage, created_at)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT DO NOTHING
+                    """, (
+                        interaction['user_id'],
+                        interaction['video_id'],
+                        interaction.get('interaction_type', 'view'),
+                        interaction.get('watch_percentage', 0.5),
+                        interaction.get('created_at', datetime.now())
+                    ))
+                    count += 1
+                except Exception as inner_e:
+                    print(f"Skipping interaction: {inner_e}")
+                    continue
+            
+            conn.commit()
+            conn.close()
+            print(f"Inserted {count} interactions (with conflict handling)")
+            return count
     
     return 0
 

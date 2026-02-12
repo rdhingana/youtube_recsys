@@ -14,7 +14,20 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0e1117 0%, #1a1a2e 100%);
+        background: linear-gradient(180deg, #0e1117 0%, #16213e 100%);
+    }
+    [data-testid="stSidebarNav"] a {
+        padding: 0.6rem 1rem;
+        border-radius: 8px;
+        color: #e0e0e0 !important;
+        font-weight: 500;
+    }
+    [data-testid="stSidebarNav"] a:hover {
+        background: rgba(99, 102, 241, 0.2);
+    }
+    [data-testid="stSidebarNav"] a[aria-selected="true"] {
+        background: linear-gradient(90deg, #6366f1, #8b5cf6);
+        color: #ffffff !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -23,8 +36,9 @@ load_dotenv()
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://recsys:recsys_password@localhost:5432/youtube_recsys")
 
 with st.sidebar:
-    st.markdown("## 🎬 YouTube RecSys")
+    st.markdown("### 🎬 YouTube RecSys")
     st.caption("Video Recommendation System")
+    st.markdown("---")
 
 
 def get_thumbnail(video_id: str) -> str:
@@ -60,7 +74,6 @@ try:
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     
-    # Filters
     col1, col2, col3 = st.columns(3)
     
     cur.execute("SELECT DISTINCT category_name FROM videos WHERE category_name IS NOT NULL ORDER BY category_name")
@@ -75,7 +88,6 @@ try:
     
     st.markdown("---")
     
-    # Build query
     query = """
         SELECT video_id, title, channel_name, category_name, view_count, duration_seconds 
         FROM videos WHERE is_active = true
@@ -105,7 +117,6 @@ try:
     st.markdown("")
     
     if videos:
-        # Display in rows of 4
         for row_idx in range(0, len(videos), 4):
             cols = st.columns(4)
             for col_idx, col in enumerate(cols):
@@ -114,27 +125,17 @@ try:
                     video_id, title, channel, category, views, duration = videos[video_idx]
                     
                     with col:
-                        # Thumbnail
                         st.image(get_thumbnail(video_id), use_container_width=True)
-                        
-                        # Title (2 lines max)
                         display_title = title[:60] + "..." if len(title) > 60 else title
                         st.markdown(f"**{display_title}**")
-                        
-                        # Channel
                         st.caption(f"📺 {channel or 'Unknown'}")
-                        
-                        # Views and duration
                         meta = format_views(views)
                         if duration:
                             meta += f" · {format_duration(duration)}"
                         st.caption(meta)
-                        
-                        # Category
                         if category:
                             st.caption(f"🏷️ {category}")
-                        
-                        st.markdown("")  # Spacer between rows
+                        st.markdown("")
     else:
         st.info("No videos found matching your criteria.")
 

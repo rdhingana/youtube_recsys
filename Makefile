@@ -171,7 +171,7 @@ start-api-bg:
 
 start-ui:
 	@echo "Starting Streamlit UI on port $(UI_PORT)..."
-	streamlit run ui/app.py --server.port $(UI_PORT) --server.address 0.0.0.0
+	streamlit run ui/Home.py --server.port $(UI_PORT) --server.address 0.0.0.0
 
 start-ui-bg:
 	@echo "Starting Streamlit UI (background)..."
